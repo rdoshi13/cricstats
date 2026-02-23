@@ -13,6 +13,32 @@ CricStats is a production-grade cricket analytics platform built with:
 
 ---
 
+# Current Status (as of February 23, 2026)
+
+Implemented now:
+
+- Clean Architecture .NET 8 backend scaffold in `src/`
+- Domain model + EF Core `DbContext` + initial migration
+- PostgreSQL local setup via Docker Compose
+- `GET /api/v1/matches/upcoming` with filter support (`country`, `format`, `from`, `to`)
+- Unit tests + integration smoke tests
+
+Current behavior:
+
+- This project is API-first at this stage (no website UI yet)
+- Upcoming matches are deterministic stub data from `src/CricStats.Application/Services/UpcomingMatchesService.cs`
+- Swagger is available locally at `http://localhost:5000/swagger` while the API runs in Development
+
+Not implemented yet:
+
+- Real cricket data provider integrations
+- Weather API integration and composite weather computation pipeline
+- Hangfire recurring jobs
+- Historical ingestion/analytics endpoints
+- Next.js frontend pages
+
+---
+
 # Product Vision
 
 CricStats provides:
@@ -263,7 +289,7 @@ Data fetching:
 
 # Milestones
 
-## Milestone 1 – Core Backend Setup
+## Milestone 1 – Core Backend Setup (Completed)
 
 - Scaffold solution
 - Domain entities
@@ -271,32 +297,32 @@ Data fetching:
 - Docker Compose (Postgres)
 - Basic upcoming endpoint (stub data)
 
-## Milestone 2 – Provider Integration
+## Milestone 2 – Provider Integration (Planned)
 
 - Implement 2 providers
 - Normalize + upsert fixtures
 - Country filtering support
 
-## Milestone 3 – Weather Integration
+## Milestone 3 – Weather Integration (Planned)
 
 - Implement WeatherClient
 - Compute Composite Risk
 - Store MatchWeatherRisk
 - Expose weather endpoints
 
-## Milestone 4 – Hangfire Jobs
+## Milestone 4 – Hangfire Jobs (Planned)
 
 - Configure Hangfire
 - Implement recurring ingestion jobs
 - Add Hangfire dashboard
 
-## Milestone 5 – Historical Data
+## Milestone 5 – Historical Data (Planned)
 
 - Ingest historical matches
 - Compute venue averages
 - Venue historical endpoints
 
-## Milestone 6 – Frontend
+## Milestone 6 – Frontend (Planned)
 
 - Next.js scaffold
 - Upcoming matches page
@@ -328,13 +354,21 @@ Data fetching:
 
 ---
 
-# First Task for Codex
+# Milestone 1 Delivery Summary (Completed)
 
-1. Scaffold solution and project structure.
-2. Implement Domain layer + DbContext.
-3. Add migration + Docker Compose for Postgres.
-4. Implement GET /matches/upcoming with stub data.
-5. Return list of created files and next tasks.
+Completed deliverables:
+
+1. Scaffolded solution and project structure.
+2. Implemented Domain layer + `CricStatsDbContext`.
+3. Added initial EF migration + Docker Compose for PostgreSQL.
+4. Implemented `GET /api/v1/matches/upcoming` using deterministic stub data.
+5. Added unit and integration test coverage for Milestone 1 scope.
+
+Next implementation focus:
+
+1. Milestone 2: provider integration and normalization pipeline.
+2. Persist upcoming matches from providers and switch endpoint reads from stub to DB.
+3. Keep API contract stable while moving data source from in-memory to persisted records.
 
 ---
 
