@@ -4,11 +4,11 @@ using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace CricStats.IntegrationTests;
 
-public sealed class MatchesUpcomingEndpointTests : IClassFixture<WebApplicationFactory<Program>>
+public sealed class MatchesUpcomingEndpointTests : IClassFixture<CustomWebApplicationFactory>
 {
     private readonly WebApplicationFactory<Program> _factory;
 
-    public MatchesUpcomingEndpointTests(WebApplicationFactory<Program> factory)
+    public MatchesUpcomingEndpointTests(CustomWebApplicationFactory factory)
     {
         _factory = factory;
     }
@@ -60,5 +60,22 @@ public sealed class MatchesUpcomingEndpointTests : IClassFixture<WebApplicationF
         var response = await client.GetAsync("/api/v1/matches/upcoming?format=INVALID");
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task SyncUpcomingMatchesEndpoint_ReturnsProviderDetails()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.PostAsync("/api/v1/admin/sync/upcoming", content: null);
+
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync();
+        using var json = await JsonDocument.ParseAsync(stream);
+
+        Assert.Equal("CricketDataOrg", json.RootElement.GetProperty("providerUsed").GetString());
+        Assert.True(json.RootElement.GetProperty("matchesInserted").GetInt32() >= 0);
+        Assert.True(json.RootElement.GetProperty("providersTried").GetArrayLength() >= 1);
     }
 }

@@ -1,10 +1,14 @@
 using System;
+using CricStats.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace CricStats.Infrastructure.Persistence.Migrations;
 
+[DbContext(typeof(CricStatsDbContext))]
+[Migration("20260222000000_InitialCreate")]
 public partial class InitialCreate : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)

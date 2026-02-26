@@ -20,18 +20,21 @@ Implemented now:
 - Clean Architecture .NET 8 backend scaffold in `src/`
 - Domain model + EF Core `DbContext` + initial migration
 - PostgreSQL local setup via Docker Compose
-- `GET /api/v1/matches/upcoming` with filter support (`country`, `format`, `from`, `to`)
+- Pluggable provider integration with priority/fallback (`CricketDataOrg`, `ApiSports`)
+- Normalization + upsert pipeline for teams, venues, and matches
+- `GET /api/v1/matches/upcoming` backed by database with filter support (`country`, `format`, `from`, `to`)
+- `POST /api/v1/admin/sync/upcoming` to trigger fixture sync
 - Unit tests + integration smoke tests
 
 Current behavior:
 
-- This project is API-first at this stage (no website UI yet)
-- Upcoming matches are deterministic stub data from `src/CricStats.Application/Services/UpcomingMatchesService.cs`
+- The project is API-first at this stage (no website UI yet)
+- Upcoming endpoint reads from Postgres; if empty, it triggers provider sync and then returns data
+- Provider priority is configurable in `src/CricStats.Api/appsettings.json` under `CricketProviders`
 - Swagger is available locally at `http://localhost:5000/swagger` while the API runs in Development
 
 Not implemented yet:
 
-- Real cricket data provider integrations
 - Weather API integration and composite weather computation pipeline
 - Hangfire recurring jobs
 - Historical ingestion/analytics endpoints
@@ -297,7 +300,7 @@ Data fetching:
 - Docker Compose (Postgres)
 - Basic upcoming endpoint (stub data)
 
-## Milestone 2 – Provider Integration (Planned)
+## Milestone 2 – Provider Integration (Completed)
 
 - Implement 2 providers
 - Normalize + upsert fixtures
@@ -364,11 +367,21 @@ Completed deliverables:
 4. Implemented `GET /api/v1/matches/upcoming` using deterministic stub data.
 5. Added unit and integration test coverage for Milestone 1 scope.
 
+# Milestone 2 Delivery Summary (Completed)
+
+Completed deliverables:
+
+1. Implemented two pluggable providers (`CricketDataOrg`, `ApiSports`).
+2. Added provider priority/fallback orchestration (`CricketProviders:Priority`).
+3. Added normalization + upsert flow to persist teams, venues, and matches.
+4. Switched upcoming matches endpoint to database-backed queries with country/format/date filters.
+5. Added admin sync endpoint: `POST /api/v1/admin/sync/upcoming`.
+
 Next implementation focus:
 
-1. Milestone 2: provider integration and normalization pipeline.
-2. Persist upcoming matches from providers and switch endpoint reads from stub to DB.
-3. Keep API contract stable while moving data source from in-memory to persisted records.
+1. Milestone 3: weather integration and composite risk computation.
+2. Persist and expose computed weather risk details per match.
+3. Keep provider-driven ingestion as the source of truth for upcoming fixtures.
 
 ---
 
@@ -398,6 +411,12 @@ dotnet run --project src/CricStats.Api/CricStats.Api.csproj
 
 ```bash
 curl "http://localhost:5000/api/v1/matches/upcoming?format=T20"
+```
+
+Optional manual sync trigger:
+
+```bash
+curl -X POST "http://localhost:5000/api/v1/admin/sync/upcoming"
 ```
 
 ## 5. Build and test
