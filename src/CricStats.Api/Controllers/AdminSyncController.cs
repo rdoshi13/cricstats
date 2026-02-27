@@ -9,10 +9,14 @@ namespace CricStats.Api.Controllers;
 public sealed class AdminSyncController : ControllerBase
 {
     private readonly IUpcomingMatchesSyncService _upcomingMatchesSyncService;
+    private readonly ISeriesSyncService _seriesSyncService;
 
-    public AdminSyncController(IUpcomingMatchesSyncService upcomingMatchesSyncService)
+    public AdminSyncController(
+        IUpcomingMatchesSyncService upcomingMatchesSyncService,
+        ISeriesSyncService seriesSyncService)
     {
         _upcomingMatchesSyncService = upcomingMatchesSyncService;
+        _seriesSyncService = seriesSyncService;
     }
 
     [HttpPost("upcoming")]
@@ -29,6 +33,21 @@ public sealed class AdminSyncController : ControllerBase
             result.MatchesUpdated,
             result.TeamsUpserted,
             result.VenuesUpserted,
+            result.SyncedAtUtc));
+    }
+
+    [HttpPost("series")]
+    [ProducesResponseType(typeof(SyncUpcomingSeriesResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<SyncUpcomingSeriesResponse>> SyncUpcomingSeries(
+        CancellationToken cancellationToken)
+    {
+        var result = await _seriesSyncService.SyncUpcomingSeriesAsync(cancellationToken);
+
+        return Ok(new SyncUpcomingSeriesResponse(
+            result.ProviderUsed,
+            result.ProvidersTried,
+            result.SeriesUpserted,
+            result.SeriesMatchesUpserted,
             result.SyncedAtUtc));
     }
 }

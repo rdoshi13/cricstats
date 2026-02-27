@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using CricStats.Application.Interfaces.Providers;
 using CricStats.Application.Models.Providers;
@@ -115,6 +116,120 @@ public sealed class CricketDataOrgProvider : ICricketProvider
         }
     }
 
+    public async Task<IReadOnlyList<ProviderSeries>> GetUpcomingSeriesAsync(
+        DateTimeOffset fromUtc,
+        DateTimeOffset toUtc,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_options.Enabled || string.IsNullOrWhiteSpace(_options.ApiKey))
+        {
+            return [];
+        }
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CricketDataOrg");
+            var endpoint = $"/v1/series?apikey={Uri.EscapeDataString(_options.ApiKey)}&offset=0";
+            var payload = await client.GetFromJsonAsync<CricApiSeriesResponse>(endpoint, cancellationToken);
+            if (payload?.Data is null || payload.Data.Count == 0)
+            {
+                return [];
+            }
+
+            var series = payload.Data
+                .Where(x => !string.IsNullOrWhiteSpace(x.Id))
+                .Select(x =>
+                {
+                    var startDateUtc = ParseStartTimeUtc(null, x.StartDate);
+                    var endDateUtc = ParseStartTimeUtc(null, x.EndDate);
+                    return new ProviderSeries(
+                        ExternalId: x.Id,
+                        Name: string.IsNullOrWhiteSpace(x.Name) ? "Unknown Series" : x.Name.Trim(),
+                        StartDateUtc: startDateUtc,
+                        EndDateUtc: endDateUtc);
+                })
+                .Where(x =>
+                {
+                    var checkDate = x.StartDateUtc ?? x.EndDateUtc;
+                    return checkDate is null || (checkDate.Value >= fromUtc && checkDate.Value <= toUtc);
+                })
+                .ToList();
+
+            return series;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "CricketDataOrg series listing failed.");
+            return [];
+        }
+    }
+
+    public async Task<ProviderSeriesDetails?> GetSeriesInfoAsync(
+        string seriesExternalId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_options.Enabled || string.IsNullOrWhiteSpace(_options.ApiKey) || string.IsNullOrWhiteSpace(seriesExternalId))
+        {
+            return null;
+        }
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient("CricketDataOrg");
+            var endpoint = $"/v1/series_info?apikey={Uri.EscapeDataString(_options.ApiKey)}&offset=0&id={Uri.EscapeDataString(seriesExternalId)}";
+            using var stream = await client.GetStreamAsync(endpoint, cancellationToken);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+
+            if (!document.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            var info = data.TryGetProperty("info", out var infoNode) ? infoNode : data;
+            var infoName = ReadString(info, "name") ?? "Unknown Series";
+            var infoStart = ParseStartTimeUtc(ReadString(info, "dateTimeGMT"), ReadString(info, "startDate"));
+            var infoEnd = ParseStartTimeUtc(null, ReadString(info, "endDate"));
+
+            var matches = new List<ProviderSeriesMatch>();
+            if (data.TryGetProperty("matchList", out var matchListNode) && matchListNode.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in matchListNode.EnumerateArray())
+                {
+                    var externalId = ReadString(item, "id");
+                    if (string.IsNullOrWhiteSpace(externalId))
+                    {
+                        continue;
+                    }
+
+                    var name = ReadString(item, "name") ?? $"Match {externalId}";
+                    var matchType = ReadString(item, "matchType");
+                    var status = ReadString(item, "status") ?? string.Empty;
+                    var startTimeUtc = ParseStartTimeUtc(ReadString(item, "dateTimeGMT"), ReadString(item, "date"));
+
+                    matches.Add(new ProviderSeriesMatch(
+                        ExternalId: externalId,
+                        Name: name,
+                        Format: ParseNullableFormat(matchType, name),
+                        StartTimeUtc: startTimeUtc,
+                        Status: ParseStatus(status),
+                        StatusText: status));
+                }
+            }
+
+            return new ProviderSeriesDetails(
+                ExternalId: seriesExternalId,
+                Name: infoName,
+                StartDateUtc: infoStart,
+                EndDateUtc: infoEnd,
+                Matches: matches);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "CricketDataOrg series info lookup failed for series {SeriesId}.", seriesExternalId);
+            return null;
+        }
+    }
+
     private static DateTimeOffset? ParseStartTimeUtc(string? dateTimeGmt, string? dateOnly)
     {
         if (!string.IsNullOrWhiteSpace(dateTimeGmt) && DateTimeOffset.TryParse(dateTimeGmt, out var parsedDateTime))
@@ -205,6 +320,16 @@ public sealed class CricketDataOrgProvider : ICricketProvider
         return MatchStatus.Scheduled;
     }
 
+    private static MatchFormat? ParseNullableFormat(string? matchType, string? fallbackName)
+    {
+        if (string.IsNullOrWhiteSpace(matchType) && string.IsNullOrWhiteSpace(fallbackName))
+        {
+            return null;
+        }
+
+        return ParseFormat(matchType, fallbackName);
+    }
+
     private static string NormalizeShortName(string? provided, string fallbackName)
     {
         if (!string.IsNullOrWhiteSpace(provided))
@@ -234,6 +359,23 @@ public sealed class CricketDataOrgProvider : ICricketProvider
             .ToArray());
 
         return string.IsNullOrWhiteSpace(normalized) ? "unknown" : normalized;
+    }
+
+    private static string? ReadString(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var value))
+        {
+            return null;
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString(),
+            JsonValueKind.Number => value.GetRawText(),
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            _ => null
+        };
     }
 
     private sealed class CricApiCurrentMatchesResponse
@@ -279,5 +421,26 @@ public sealed class CricketDataOrgProvider : ICricketProvider
 
         [JsonPropertyName("shortname")]
         public string? ShortName { get; init; }
+    }
+
+    private sealed class CricApiSeriesResponse
+    {
+        [JsonPropertyName("data")]
+        public List<CricApiSeries>? Data { get; init; }
+    }
+
+    private sealed class CricApiSeries
+    {
+        [JsonPropertyName("id")]
+        public string Id { get; init; } = string.Empty;
+
+        [JsonPropertyName("name")]
+        public string? Name { get; init; }
+
+        [JsonPropertyName("startDate")]
+        public string? StartDate { get; init; }
+
+        [JsonPropertyName("endDate")]
+        public string? EndDate { get; init; }
     }
 }

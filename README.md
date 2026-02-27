@@ -30,6 +30,10 @@ Implemented now:
 - Composite weather risk computation + storage in `MatchWeatherRisk`
 - `GET /api/v1/matches/{id}/weather-risk` for score + breakdown
 - `POST /api/v1/admin/weather/refresh` to recompute upcoming match weather risk
+- Hangfire configured with PostgreSQL storage + recurring jobs for fixture sync and weather refresh
+- Series catalog persistence (`Series`, `SeriesMatches`) with provider ingestion
+- `GET /api/v1/series/upcoming` backed by database
+- `POST /api/v1/admin/sync/series` to trigger series catalog sync
 - Unit tests + integration smoke tests
 - `frontend/README.md` placeholder (no Next.js app scaffold yet)
 
@@ -41,13 +45,15 @@ Current behavior:
 - Provider priority is configurable in `src/CricStats.Api/appsettings.json` under `CricketProviders`
 - Live match provider settings are configurable in `src/CricStats.Api/appsettings.json` under `LiveCricket`
 - Weather risk settings are configurable in `src/CricStats.Api/appsettings.json` under `WeatherRisk`
+- Hangfire settings are configurable in `src/CricStats.Api/appsettings.json` under `Hangfire`
+- Hangfire dashboard is available locally at `http://localhost:5000/hangfire` in Development
 - Swagger is available locally at `http://localhost:5000/swagger` while the API runs in Development
 
 Not implemented yet:
 
 - Production-grade provider hardening (rate limiting, caching, richer venue/team geo normalization)
-- Hangfire recurring jobs
-- Historical ingestion/analytics endpoints
+- Hangfire operational hardening (dashboard auth, retries/backoff policies, alerting)
+- Historical ingestion/analytics endpoints (partial: series catalog sync added)
 - Next.js frontend pages
 
 ---
@@ -223,9 +229,11 @@ Recurring Jobs:
    - Fetch fixtures across all formats
    - Upsert matches + venues
 
-2. SyncHistoricalMatchesJob
-   - Daily
-   - Ingest historical matches
+2. SyncUpcomingSeriesJob
+   - Daily (00:00 UTC)
+   - Fetch upcoming series list
+   - Fetch per-series `series_info`
+   - Upsert series + series matches
 
 3. RefreshWeatherRiskJob
    - Every 3 hours
@@ -265,6 +273,7 @@ GET /api/v1/venues/{id}/historical
 
 Admin endpoints (protected):
 POST /api/v1/admin/sync/upcoming
+POST /api/v1/admin/sync/series
 POST /api/v1/admin/sync/historical
 POST /api/v1/admin/weather/refresh
 
@@ -322,14 +331,19 @@ Data fetching:
 - Store MatchWeatherRisk
 - Expose weather endpoints
 
-## Milestone 4 – Hangfire Jobs (Planned)
+## Milestone 4 – Hangfire Jobs (In Progress)
 
-- Configure Hangfire
-- Implement recurring ingestion jobs
-- Add Hangfire dashboard
+- Configure Hangfire with PostgreSQL storage
+- Implement recurring jobs:
+  - `sync-upcoming-matches` (`0 */6 * * *`, UTC)
+  - `refresh-weather-risk` (`0 */3 * * *`, UTC)
+  - `sync-upcoming-series` (`0 0 * * *`, UTC)
+- Expose Hangfire dashboard at `/hangfire` in Development
 
-## Milestone 5 – Historical Data (Planned)
+## Milestone 5 – Historical Data (In Progress)
 
+- Ingest series catalog (`series` + `series_info`) and persist in DB
+- Add series browsing endpoint (`/api/v1/series/upcoming`)
 - Ingest historical matches
 - Compute venue averages
 - Venue historical endpoints
@@ -397,11 +411,31 @@ Completed deliverables:
    - `GET /api/v1/matches/{id}/weather-risk`
    - `POST /api/v1/admin/weather/refresh`
 
+# Milestone 4 Delivery Summary (In Progress)
+
+Completed so far:
+
+1. Added Hangfire server + PostgreSQL storage wiring in API startup.
+2. Registered recurring jobs for upcoming sync and weather-risk refresh.
+3. Added daily recurring series sync job and config (`sync-upcoming-series`).
+4. Added Hangfire configuration section in appsettings and dashboard in Development.
+
+# Milestone 5 Delivery Summary (In Progress)
+
+Completed so far:
+
+1. Added `Series` and `SeriesMatches` schema + migration.
+2. Added provider ingestion path for upcoming series and per-series details.
+3. Added series sync service + endpoints:
+   - `POST /api/v1/admin/sync/series`
+   - `GET /api/v1/series/upcoming`
+4. Wired Hangfire daily series catalog sync at 00:00 UTC.
+
 Next implementation focus:
 
-1. Milestone 4: Hangfire recurring jobs for fixture sync and weather risk refresh.
-2. Schedule idempotent background ingestion without changing API contracts.
-3. Add dashboard/operational visibility for recurring jobs.
+1. Add dashboard authentication and production-safe access controls.
+2. Add job-level retry/backoff and operational logging/metrics.
+3. Extend recurring orchestration as historical ingestion is introduced in Milestone 5.
 
 ---
 
@@ -451,6 +485,13 @@ Optional manual sync trigger:
 
 ```bash
 curl -X POST "http://localhost:5000/api/v1/admin/sync/upcoming"
+curl -X POST "http://localhost:5000/api/v1/admin/sync/series"
+```
+
+Optional series query:
+
+```bash
+curl "http://localhost:5000/api/v1/series/upcoming"
 ```
 
 Live provider notes:
@@ -466,6 +507,15 @@ Live provider notes:
   `dotnet user-secrets --project src/CricStats.Api/CricStats.Api.csproj set "CricketDataOrgApi:ApiKey" "YOUR_KEY"`
 - Set `LiveCricket:Enabled=false` in `src/CricStats.Api/appsettings.Development.json` to disable Cricbuzz fallback.
 - Weather lookup uses Open-Meteo only; if it fails, no synthetic weather points are generated.
+- Hangfire recurring jobs run in UTC with defaults:
+  - `sync-upcoming-matches`: every 6 hours
+  - `refresh-weather-risk`: every 3 hours
+  - `sync-upcoming-series`: every day at 00:00 UTC
+- You can change schedules via:
+  - `Hangfire:Jobs:SyncUpcomingMatchesCron`
+  - `Hangfire:Jobs:RefreshWeatherRiskCron`
+  - `Hangfire:Jobs:SyncUpcomingSeriesCron`
+- Open dashboard in Development: `http://localhost:5000/hangfire`
 
 Optional weather refresh and weather-risk lookup:
 

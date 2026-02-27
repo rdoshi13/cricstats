@@ -74,7 +74,7 @@ public sealed class MatchesUpcomingEndpointTests : IClassFixture<CustomWebApplic
         await using var stream = await response.Content.ReadAsStreamAsync();
         using var json = await JsonDocument.ParseAsync(stream);
 
-        Assert.Equal("TestCricket", json.RootElement.GetProperty("providerUsed").GetString());
+        Assert.Equal("FixtureCricketProvider", json.RootElement.GetProperty("providerUsed").GetString());
         Assert.True(json.RootElement.GetProperty("matchesInserted").GetInt32() >= 0);
         Assert.True(json.RootElement.GetProperty("providersTried").GetArrayLength() >= 1);
     }
@@ -121,5 +121,45 @@ public sealed class MatchesUpcomingEndpointTests : IClassFixture<CustomWebApplic
         Assert.Equal(matchId, weatherJson.RootElement.GetProperty("matchId").GetGuid());
         Assert.True(weatherJson.RootElement.GetProperty("compositeRiskScore").GetDecimal() >= 0m);
         Assert.True(weatherJson.RootElement.GetProperty("breakdown").TryGetProperty("averagePrecipProbability", out _));
+    }
+
+    [Fact]
+    public async Task SyncUpcomingSeriesEndpoint_ReturnsProviderDetails()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.PostAsync("/api/v1/admin/sync/series", content: null);
+
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync();
+        using var json = await JsonDocument.ParseAsync(stream);
+
+        Assert.Equal("FixtureCricketProvider", json.RootElement.GetProperty("providerUsed").GetString());
+        Assert.True(json.RootElement.GetProperty("seriesUpserted").GetInt32() >= 1);
+    }
+
+    [Fact]
+    public async Task GetUpcomingSeries_ReturnsSeriesWithMatches()
+    {
+        var client = _factory.CreateClient();
+        var syncResponse = await client.PostAsync("/api/v1/admin/sync/series", content: null);
+        syncResponse.EnsureSuccessStatusCode();
+
+        var response = await client.GetAsync("/api/v1/series/upcoming");
+
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync();
+        using var json = await JsonDocument.ParseAsync(stream);
+
+        Assert.True(json.RootElement.TryGetProperty("series", out var series));
+        Assert.True(json.RootElement.TryGetProperty("totalCount", out var totalCount));
+        Assert.True(totalCount.GetInt32() >= 1);
+
+        var firstSeries = series[0];
+        Assert.True(firstSeries.TryGetProperty("name", out _));
+        Assert.True(firstSeries.TryGetProperty("matches", out var matches));
+        Assert.Equal(JsonValueKind.Array, matches.ValueKind);
     }
 }

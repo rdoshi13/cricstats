@@ -4,6 +4,7 @@ using CricStats.Infrastructure.Options;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
@@ -14,8 +15,24 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
 {
     private readonly string _databaseName = $"CricStatsIntegration-{Guid.NewGuid()}";
 
+    public CustomWebApplicationFactory()
+    {
+        Environment.SetEnvironmentVariable("Hangfire__Enabled", "false");
+        Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Testing");
+    }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        builder.UseEnvironment("Testing");
+
+        builder.ConfigureAppConfiguration((_, config) =>
+        {
+            config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Hangfire:Enabled"] = "false"
+            });
+        });
+
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<DbContextOptions<CricStatsDbContext>>();
@@ -31,7 +48,7 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
 
             services.AddSingleton<IOptions<CricketProvidersOptions>>(Options.Create(new CricketProvidersOptions
             {
-                Priority = ["TestCricket"],
+                Priority = ["FixtureCricketProvider"],
                 SyncWindowDays = 14
             }));
 
@@ -51,8 +68,16 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 TimeoutSeconds = 8
             }));
 
-            services.AddScoped<ICricketProvider, TestCricketProvider>();
+            services.AddScoped<ICricketProvider, FixtureCricketProvider>();
             services.AddScoped<IWeatherProvider, TestWeatherProvider>();
         });
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+
+        Environment.SetEnvironmentVariable("Hangfire__Enabled", null);
+        Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", null);
     }
 }

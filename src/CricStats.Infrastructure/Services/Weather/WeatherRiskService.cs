@@ -6,6 +6,7 @@ using CricStats.Domain.Entities;
 using CricStats.Infrastructure.Options;
 using CricStats.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -18,19 +19,22 @@ public sealed class WeatherRiskService : IWeatherRiskService
     private readonly IReadOnlyDictionary<string, IWeatherProvider> _weatherProviders;
     private readonly WeatherRiskOptions _options;
     private readonly ILogger<WeatherRiskService> _logger;
+    private readonly bool _isTestingEnvironment;
 
     public WeatherRiskService(
         CricStatsDbContext dbContext,
         IUpcomingMatchesSyncService upcomingMatchesSyncService,
         IEnumerable<IWeatherProvider> weatherProviders,
         IOptions<WeatherRiskOptions> options,
-        ILogger<WeatherRiskService> logger)
+        ILogger<WeatherRiskService> logger,
+        IHostEnvironment? hostEnvironment = null)
     {
         _dbContext = dbContext;
         _upcomingMatchesSyncService = upcomingMatchesSyncService;
         _weatherProviders = weatherProviders.ToDictionary(x => x.Name, StringComparer.OrdinalIgnoreCase);
         _options = options.Value;
         _logger = logger;
+        _isTestingEnvironment = hostEnvironment?.IsEnvironment("Testing") ?? true;
     }
 
     public async Task<RefreshWeatherRiskResult> RefreshUpcomingWeatherRiskAsync(
@@ -39,10 +43,19 @@ public sealed class WeatherRiskService : IWeatherRiskService
         var now = DateTimeOffset.UtcNow;
         var windowEnd = now.AddDays(Math.Clamp(_options.RefreshWindowDays, 1, 30));
 
-        var matches = await _dbContext.Matches
+        var query = _dbContext.Matches
             .Include(x => x.Venue)
             .Include(x => x.MatchWeatherRisk)
-            .Where(x => x.StartTimeUtc >= now && x.StartTimeUtc <= windowEnd)
+            .Where(x => x.StartTimeUtc >= now && x.StartTimeUtc <= windowEnd);
+
+        if (!_isTestingEnvironment)
+        {
+            query = query.Where(x =>
+                !x.SourceProvider.StartsWith("Test") &&
+                !x.SourceProvider.StartsWith("Fixture"));
+        }
+
+        var matches = await query
             .OrderBy(x => x.StartTimeUtc)
             .ToListAsync(cancellationToken);
 
@@ -51,10 +64,19 @@ public sealed class WeatherRiskService : IWeatherRiskService
             _logger.LogInformation("No upcoming matches for weather refresh. Triggering fixture sync.");
             await _upcomingMatchesSyncService.SyncUpcomingMatchesAsync(cancellationToken);
 
-            matches = await _dbContext.Matches
+            var refreshedQuery = _dbContext.Matches
                 .Include(x => x.Venue)
                 .Include(x => x.MatchWeatherRisk)
-                .Where(x => x.StartTimeUtc >= now && x.StartTimeUtc <= windowEnd)
+                .Where(x => x.StartTimeUtc >= now && x.StartTimeUtc <= windowEnd);
+
+            if (!_isTestingEnvironment)
+            {
+                refreshedQuery = refreshedQuery.Where(x =>
+                    !x.SourceProvider.StartsWith("Test") &&
+                    !x.SourceProvider.StartsWith("Fixture"));
+            }
+
+            matches = await refreshedQuery
                 .OrderBy(x => x.StartTimeUtc)
                 .ToListAsync(cancellationToken);
         }

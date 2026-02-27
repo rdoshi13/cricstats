@@ -34,11 +34,15 @@ public static class DependencyInjection
         var syncWindowDays = int.TryParse(providerSection["SyncWindowDays"], out var parsedSyncWindow)
             ? parsedSyncWindow
             : 14;
+        var seriesSyncWindowDays = int.TryParse(providerSection["SeriesSyncWindowDays"], out var parsedSeriesSyncWindow)
+            ? parsedSeriesSyncWindow
+            : 120;
 
         services.AddSingleton<IOptions<CricketProvidersOptions>>(Microsoft.Extensions.Options.Options.Create(new CricketProvidersOptions
         {
             Priority = priority,
-            SyncWindowDays = syncWindowDays
+            SyncWindowDays = syncWindowDays,
+            SeriesSyncWindowDays = seriesSyncWindowDays
         }));
 
         var liveCricketSection = configuration.GetSection(LiveCricketOptions.SectionName);
@@ -124,6 +128,8 @@ public static class DependencyInjection
         services.AddScoped<IWeatherProvider, OpenMeteoStubProvider>();
         services.AddScoped<IUpcomingMatchesSyncService, UpcomingMatchesSyncService>();
         services.AddScoped<IUpcomingMatchesService, UpcomingMatchesService>();
+        services.AddScoped<ISeriesSyncService, SeriesSyncService>();
+        services.AddScoped<IUpcomingSeriesService, UpcomingSeriesService>();
         services.AddScoped<IWeatherRiskService, WeatherRiskService>();
 
         return services;

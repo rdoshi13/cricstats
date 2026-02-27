@@ -6,6 +6,7 @@ using CricStats.Domain.Entities;
 using CricStats.Infrastructure.Options;
 using CricStats.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -17,17 +18,20 @@ public sealed class UpcomingMatchesSyncService : IUpcomingMatchesSyncService
     private readonly IReadOnlyDictionary<string, ICricketProvider> _providers;
     private readonly CricketProvidersOptions _options;
     private readonly ILogger<UpcomingMatchesSyncService> _logger;
+    private readonly bool _isTestingEnvironment;
 
     public UpcomingMatchesSyncService(
         CricStatsDbContext dbContext,
         IEnumerable<ICricketProvider> providers,
         IOptions<CricketProvidersOptions> options,
-        ILogger<UpcomingMatchesSyncService> logger)
+        ILogger<UpcomingMatchesSyncService> logger,
+        IHostEnvironment? hostEnvironment = null)
     {
         _dbContext = dbContext;
         _providers = providers.ToDictionary(x => x.Name, StringComparer.OrdinalIgnoreCase);
         _options = options.Value;
         _logger = logger;
+        _isTestingEnvironment = hostEnvironment?.IsEnvironment("Testing") ?? true;
     }
 
     public async Task<UpcomingMatchesSyncResult> SyncUpcomingMatchesAsync(
@@ -45,6 +49,14 @@ public sealed class UpcomingMatchesSyncService : IUpcomingMatchesSyncService
 
         foreach (var providerName in providerOrder)
         {
+            if (!_isTestingEnvironment && IsTestProviderName(providerName))
+            {
+                _logger.LogInformation(
+                    "Skipping provider '{ProviderName}' because test providers are disabled outside Testing.",
+                    providerName);
+                continue;
+            }
+
             providersTried.Add(providerName);
 
             if (!_providers.TryGetValue(providerName, out var provider))
@@ -153,6 +165,12 @@ public sealed class UpcomingMatchesSyncService : IUpcomingMatchesSyncService
             TeamsUpserted: teamExternalIds.Count,
             VenuesUpserted: venueExternalIds.Count,
             SyncedAtUtc: syncedAtUtc);
+    }
+
+    private static bool IsTestProviderName(string providerName)
+    {
+        return providerName.StartsWith("Test", StringComparison.OrdinalIgnoreCase)
+            || providerName.StartsWith("Fixture", StringComparison.OrdinalIgnoreCase);
     }
 
     private List<string> BuildProviderPriority()

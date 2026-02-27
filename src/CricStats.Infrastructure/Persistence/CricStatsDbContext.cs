@@ -13,6 +13,8 @@ public sealed class CricStatsDbContext : DbContext
     public DbSet<Team> Teams => Set<Team>();
     public DbSet<Venue> Venues => Set<Venue>();
     public DbSet<Match> Matches => Set<Match>();
+    public DbSet<Series> Series => Set<Series>();
+    public DbSet<SeriesMatch> SeriesMatches => Set<SeriesMatch>();
     public DbSet<InningsScore> InningsScores => Set<InningsScore>();
     public DbSet<WeatherSnapshot> WeatherSnapshots => Set<WeatherSnapshot>();
     public DbSet<MatchWeatherRisk> MatchWeatherRisks => Set<MatchWeatherRisk>();

@@ -4,6 +4,7 @@ using CricStats.Contracts.Matches;
 using CricStats.Domain.Enums;
 using CricStats.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace CricStats.Infrastructure.Services;
@@ -13,15 +14,18 @@ public sealed class UpcomingMatchesService : IUpcomingMatchesService
     private readonly CricStatsDbContext _dbContext;
     private readonly IUpcomingMatchesSyncService _syncService;
     private readonly ILogger<UpcomingMatchesService> _logger;
+    private readonly bool _isTestingEnvironment;
 
     public UpcomingMatchesService(
         CricStatsDbContext dbContext,
         IUpcomingMatchesSyncService syncService,
-        ILogger<UpcomingMatchesService> logger)
+        ILogger<UpcomingMatchesService> logger,
+        IHostEnvironment? hostEnvironment = null)
     {
         _dbContext = dbContext;
         _syncService = syncService;
         _logger = logger;
+        _isTestingEnvironment = hostEnvironment?.IsEnvironment("Testing") ?? true;
     }
 
     public async Task<UpcomingMatchesResponse> GetUpcomingMatchesAsync(
@@ -53,6 +57,13 @@ public sealed class UpcomingMatchesService : IUpcomingMatchesService
             .Include(x => x.AwayTeam)
             .Include(x => x.MatchWeatherRisk)
             .Where(x => x.StartTimeUtc >= (filter.From ?? now));
+
+        if (!_isTestingEnvironment)
+        {
+            query = query.Where(x =>
+                !x.SourceProvider.StartsWith("Test") &&
+                !x.SourceProvider.StartsWith("Fixture"));
+        }
 
         if (!string.IsNullOrWhiteSpace(filter.Country))
         {
