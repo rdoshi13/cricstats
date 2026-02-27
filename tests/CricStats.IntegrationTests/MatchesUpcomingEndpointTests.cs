@@ -74,7 +74,7 @@ public sealed class MatchesUpcomingEndpointTests : IClassFixture<CustomWebApplic
         await using var stream = await response.Content.ReadAsStreamAsync();
         using var json = await JsonDocument.ParseAsync(stream);
 
-        Assert.Equal("CricketDataOrg", json.RootElement.GetProperty("providerUsed").GetString());
+        Assert.Equal("TestCricket", json.RootElement.GetProperty("providerUsed").GetString());
         Assert.True(json.RootElement.GetProperty("matchesInserted").GetInt32() >= 0);
         Assert.True(json.RootElement.GetProperty("providersTried").GetArrayLength() >= 1);
     }

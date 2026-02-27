@@ -41,6 +41,42 @@ public static class DependencyInjection
             SyncWindowDays = syncWindowDays
         }));
 
+        var liveCricketSection = configuration.GetSection(LiveCricketOptions.SectionName);
+        var liveCricketEnabled = bool.TryParse(liveCricketSection["Enabled"], out var parsedLiveEnabled)
+            ? parsedLiveEnabled
+            : true;
+        var liveCricketBaseUrl = liveCricketSection["BaseUrl"] ?? "https://cricbuzz-live.vercel.app";
+        var liveCricketMatchType = liveCricketSection["MatchType"] ?? "international";
+        var liveCricketTimeoutSeconds = int.TryParse(liveCricketSection["TimeoutSeconds"], out var parsedLiveTimeout)
+            ? parsedLiveTimeout
+            : 8;
+
+        services.AddSingleton<IOptions<LiveCricketOptions>>(Microsoft.Extensions.Options.Options.Create(new LiveCricketOptions
+        {
+            Enabled = liveCricketEnabled,
+            BaseUrl = liveCricketBaseUrl,
+            MatchType = liveCricketMatchType,
+            TimeoutSeconds = liveCricketTimeoutSeconds
+        }));
+
+        var cricketDataSection = configuration.GetSection(CricketDataOrgApiOptions.SectionName);
+        var cricketDataEnabled = bool.TryParse(cricketDataSection["Enabled"], out var parsedCricketDataEnabled)
+            ? parsedCricketDataEnabled
+            : true;
+        var cricketDataBaseUrl = cricketDataSection["BaseUrl"] ?? "https://api.cricapi.com";
+        var cricketDataApiKey = cricketDataSection["ApiKey"] ?? string.Empty;
+        var cricketDataTimeoutSeconds = int.TryParse(cricketDataSection["TimeoutSeconds"], out var parsedCricketDataTimeout)
+            ? parsedCricketDataTimeout
+            : 8;
+
+        services.AddSingleton<IOptions<CricketDataOrgApiOptions>>(Microsoft.Extensions.Options.Options.Create(new CricketDataOrgApiOptions
+        {
+            Enabled = cricketDataEnabled,
+            BaseUrl = cricketDataBaseUrl,
+            ApiKey = cricketDataApiKey,
+            TimeoutSeconds = cricketDataTimeoutSeconds
+        }));
+
         var weatherSection = configuration.GetSection(WeatherRiskOptions.SectionName);
         var providerName = weatherSection["ProviderName"] ?? "OpenMeteoStub";
         var refreshWindowDays = int.TryParse(weatherSection["RefreshWindowDays"], out var parsedRefreshWindowDays)
@@ -62,8 +98,29 @@ public static class DependencyInjection
         }));
 
         services.AddDbContext<CricStatsDbContext>(options => options.UseNpgsql(connectionString));
+        services.AddHttpClient("CricbuzzLive", client =>
+        {
+            client.BaseAddress = new Uri(liveCricketBaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(Math.Clamp(liveCricketTimeoutSeconds, 2, 30));
+        });
+        services.AddHttpClient("CricketDataOrg", client =>
+        {
+            client.BaseAddress = new Uri(cricketDataBaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(Math.Clamp(cricketDataTimeoutSeconds, 2, 30));
+        });
+        services.AddHttpClient("OpenMeteoGeocoding", client =>
+        {
+            client.BaseAddress = new Uri("https://geocoding-api.open-meteo.com");
+            client.Timeout = TimeSpan.FromSeconds(10);
+        });
+        services.AddHttpClient("OpenMeteoWeather", client =>
+        {
+            client.BaseAddress = new Uri("https://api.open-meteo.com");
+            client.Timeout = TimeSpan.FromSeconds(10);
+        });
+
+        services.AddScoped<ICricketProvider, CricbuzzLiveProvider>();
         services.AddScoped<ICricketProvider, CricketDataOrgProvider>();
-        services.AddScoped<ICricketProvider, ApiSportsProvider>();
         services.AddScoped<IWeatherProvider, OpenMeteoStubProvider>();
         services.AddScoped<IUpcomingMatchesSyncService, UpcomingMatchesSyncService>();
         services.AddScoped<IUpcomingMatchesService, UpcomingMatchesService>();

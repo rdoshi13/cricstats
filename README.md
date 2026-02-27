@@ -7,40 +7,45 @@ CricStats is a production-grade cricket analytics platform built with:
 - Hangfire for background jobs
 - Pluggable cricket data providers
 - Weather API integration
-- Next.js frontend
+- Next.js frontend (planned)
 - Composite Rain Risk scoring
 - Future AI/ML integration support
 
 ---
 
-# Current Status (as of February 26, 2026)
+# Current Status (as of February 27, 2026)
 
 Implemented now:
 
 - Clean Architecture .NET 8 backend scaffold in `src/`
 - Domain model + EF Core `DbContext` + initial migration
 - PostgreSQL local setup via Docker Compose
-- Pluggable provider integration with priority/fallback (`CricketDataOrg`, `ApiSports`)
+- Pluggable provider integration with priority/fallback (`CricketDataOrg`, `CricbuzzLive`)
 - Normalization + upsert pipeline for teams, venues, and matches
 - `GET /api/v1/matches/upcoming` backed by database with filter support (`country`, `format`, `from`, `to`)
 - `POST /api/v1/admin/sync/upcoming` to trigger fixture sync
-- Weather provider integration (stub `OpenMeteoStub`) and persisted weather snapshots
+- Live match provider integration (`CricketDataOrg`, `CricbuzzLive`)
+- Live weather provider integration (Open-Meteo, no synthetic fallback data)
+- Persisted weather snapshots per venue/match window
 - Composite weather risk computation + storage in `MatchWeatherRisk`
 - `GET /api/v1/matches/{id}/weather-risk` for score + breakdown
 - `POST /api/v1/admin/weather/refresh` to recompute upcoming match weather risk
 - Unit tests + integration smoke tests
+- `frontend/README.md` placeholder (no Next.js app scaffold yet)
 
 Current behavior:
 
 - The project is API-first at this stage (no website UI yet)
 - Upcoming endpoint reads from Postgres; if empty, it triggers provider sync and then returns data
+- The runtime path no longer uses deterministic local fixture stubs
 - Provider priority is configurable in `src/CricStats.Api/appsettings.json` under `CricketProviders`
+- Live match provider settings are configurable in `src/CricStats.Api/appsettings.json` under `LiveCricket`
 - Weather risk settings are configurable in `src/CricStats.Api/appsettings.json` under `WeatherRisk`
 - Swagger is available locally at `http://localhost:5000/swagger` while the API runs in Development
 
 Not implemented yet:
 
-- Real external weather API integration (current weather provider is deterministic stub data)
+- Production-grade provider hardening (rate limiting, caching, richer venue/team geo normalization)
 - Hangfire recurring jobs
 - Historical ingestion/analytics endpoints
 - Next.js frontend pages
@@ -194,8 +199,7 @@ Provider priority order configurable in appsettings:
 
 CricketProviders:Priority = [
 "CricketDataOrg",
-"ApiSports",
-"Cricsheet"
+"CricbuzzLive"
 ]
 
 If provider A fails or lacks data, fallback to next.
@@ -303,7 +307,7 @@ Data fetching:
 - Domain entities
 - EF Core + migrations
 - Docker Compose (Postgres)
-- Basic upcoming endpoint (stub data)
+- Basic upcoming endpoint (stubbed in M1, replaced with DB-backed provider sync in M2)
 
 ## Milestone 2 – Provider Integration (Completed)
 
@@ -353,12 +357,11 @@ Data fetching:
 # Development Requirements
 
 - .NET 8 SDK
-- Node 20+
 - Docker
 - PostgreSQL
-- Hangfire
-- Weather API key
-- Cricket API key(s)
+- `dotnet-ef` CLI tool (EF migrations): `dotnet tool install --global dotnet-ef --version 8.*`
+- CricketData/CricAPI key (`CricketDataOrgApi`)
+- Node 20+ (only needed once frontend work starts)
 
 ---
 
@@ -369,14 +372,14 @@ Completed deliverables:
 1. Scaffolded solution and project structure.
 2. Implemented Domain layer + `CricStatsDbContext`.
 3. Added initial EF migration + Docker Compose for PostgreSQL.
-4. Implemented `GET /api/v1/matches/upcoming` using deterministic stub data.
+4. Implemented initial `GET /api/v1/matches/upcoming` with deterministic stub data (superseded by live provider sync in Milestone 2).
 5. Added unit and integration test coverage for Milestone 1 scope.
 
 # Milestone 2 Delivery Summary (Completed)
 
 Completed deliverables:
 
-1. Implemented two pluggable providers (`CricketDataOrg`, `ApiSports`).
+1. Implemented two live pluggable providers (`CricketDataOrg`, `CricbuzzLive`).
 2. Added provider priority/fallback orchestration (`CricketProviders:Priority`).
 3. Added normalization + upsert flow to persist teams, venues, and matches.
 4. Switched upcoming matches endpoint to database-backed queries with country/format/date filters.
@@ -386,7 +389,7 @@ Completed deliverables:
 
 Completed deliverables:
 
-1. Added weather provider abstraction and stub implementation (`OpenMeteoStub`).
+1. Added weather provider abstraction and Open-Meteo live implementation.
 2. Added weather snapshot ingestion for match windows (`-2h` to `+6h`).
 3. Implemented composite weather risk calculator and risk-level mapping.
 4. Persisted and exposed `MatchWeatherRisk` for each upcoming match.
@@ -418,6 +421,20 @@ dotnet ef database update \
   --startup-project src/CricStats.Api/CricStats.Api.csproj
 ```
 
+If `dotnet ef` is not found:
+
+```bash
+dotnet tool install --global dotnet-ef --version 8.*
+export PATH="$PATH:$HOME/.dotnet/tools"
+```
+
+To avoid exporting PATH every session, add this once to `~/.bash_profile`:
+
+```bash
+echo 'export PATH="$PATH:$HOME/.dotnet/tools"' >> ~/.bash_profile
+source ~/.bash_profile
+```
+
 ## 3. Run API
 
 ```bash
@@ -435,6 +452,20 @@ Optional manual sync trigger:
 ```bash
 curl -X POST "http://localhost:5000/api/v1/admin/sync/upcoming"
 ```
+
+Live provider notes:
+
+- Upcoming fixture sync uses `CricketDataOrg` first by default (`CricketProviders:Priority`).
+- Configure your CricketData/CricAPI key under `CricketDataOrgApi:ApiKey` in `appsettings.Development.json`
+  or via env var `CricketDataOrgApi__ApiKey`.
+- Persist API key across sessions by adding this once to `~/.bash_profile`:
+  `echo 'export CricketDataOrgApi__ApiKey="YOUR_KEY"' >> ~/.bash_profile`
+- Prefer storing secrets outside committed config using user-secrets:
+  `dotnet user-secrets --project src/CricStats.Api/CricStats.Api.csproj init`
+  then:
+  `dotnet user-secrets --project src/CricStats.Api/CricStats.Api.csproj set "CricketDataOrgApi:ApiKey" "YOUR_KEY"`
+- Set `LiveCricket:Enabled=false` in `src/CricStats.Api/appsettings.Development.json` to disable Cricbuzz fallback.
+- Weather lookup uses Open-Meteo only; if it fails, no synthetic weather points are generated.
 
 Optional weather refresh and weather-risk lookup:
 
