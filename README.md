@@ -7,9 +7,49 @@ CricStats is a production-grade cricket analytics platform built with:
 - Hangfire for background jobs
 - Pluggable cricket data providers
 - Weather API integration
-- Next.js frontend (planned)
+- Next.js frontend dashboard (in progress)
 - Composite Rain Risk scoring
 - Future AI/ML integration support
+
+## Quick Commands
+
+Assume you are in the repository root (`cricstats/`) unless noted.
+
+Start Postgres (Docker):
+
+```bash
+docker compose up -d postgres
+```
+
+Run backend API:
+
+```bash
+dotnet run --project src/CricStats.Api/CricStats.Api.csproj
+```
+
+Run frontend dashboard:
+
+```bash
+cd frontend
+npm install
+echo 'API_BASE_URL=http://localhost:5000' > .env.local
+npm run dev
+```
+
+Stop frontend/backend:
+- Press `Ctrl+C` in each running terminal.
+
+Stop Docker Postgres:
+
+```bash
+docker compose stop postgres
+```
+
+End local Docker stack completely:
+
+```bash
+docker compose down
+```
 
 ---
 
@@ -35,11 +75,11 @@ Implemented now:
 - `GET /api/v1/series/upcoming` backed by database
 - `POST /api/v1/admin/sync/series` to trigger series catalog sync
 - Unit tests + integration smoke tests
-- `frontend/README.md` placeholder (no Next.js app scaffold yet)
+- Next.js frontend scaffold in `frontend/` with dashboard for upcoming matches and series
 
 Current behavior:
 
-- The project is API-first at this stage (no website UI yet)
+- The project is API-first with a minimal local website UI (`frontend/`) for dashboard views
 - Upcoming endpoint reads from Postgres; if empty, it triggers provider sync and then returns data
 - The runtime path no longer uses deterministic local fixture stubs
 - Provider priority is configurable in `src/CricStats.Api/appsettings.json` under `CricketProviders`
@@ -54,7 +94,7 @@ Not implemented yet:
 - Production-grade provider hardening (rate limiting, caching, richer venue/team geo normalization)
 - Hangfire operational hardening (dashboard auth, retries/backoff policies, alerting)
 - Historical ingestion/analytics endpoints (partial: series catalog sync added)
-- Next.js frontend pages
+- Advanced frontend pages and user interactions beyond the initial dashboard
 
 ---
 
@@ -359,12 +399,13 @@ Data fetching:
 - Compute venue averages
 - Venue historical endpoints
 
-## Milestone 6 – Frontend (Planned)
+## Milestone 6 – Frontend (In Progress)
 
 - Next.js scaffold
-- Upcoming matches page
+- Dashboard page for `/api/v1/matches/upcoming`
+- Dashboard page for `/api/v1/series/upcoming`
+- Venue/stadium display for matches and series matches
 - Country filters
-- Weather risk badges
 - Match detail page
 
 ---
@@ -386,7 +427,7 @@ Data fetching:
 - PostgreSQL
 - `dotnet-ef` CLI tool (EF migrations): `dotnet tool install --global dotnet-ef --version 8.*`
 - CricketData/CricAPI key (`CricketDataOrgApi`)
-- Node 20+ (only needed once frontend work starts)
+- Node 20+ (required for frontend in `frontend/`)
 
 ---
 
@@ -543,3 +584,14 @@ curl "http://localhost:5000/api/v1/matches/{matchId}/weather-risk"
 dotnet build CricStats.sln
 dotnet test CricStats.sln
 ```
+
+## 6. Run frontend dashboard
+
+```bash
+cd frontend
+npm install
+echo 'API_BASE_URL=http://localhost:5000' > .env.local
+npm run dev
+```
+
+Open `http://localhost:3000`.
