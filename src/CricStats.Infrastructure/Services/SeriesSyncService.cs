@@ -1,6 +1,7 @@
 using CricStats.Application.Interfaces;
 using CricStats.Application.Interfaces.Providers;
 using CricStats.Application.Models;
+using CricStats.Application.Models.Providers;
 using CricStats.Domain.Entities;
 using CricStats.Infrastructure.Options;
 using CricStats.Infrastructure.Persistence;
@@ -96,6 +97,33 @@ public sealed class SeriesSyncService : ISeriesSyncService
         var syncedAtUtc = DateTimeOffset.UtcNow;
         var seriesUpserted = 0;
         var seriesMatchesUpserted = 0;
+        var maxConcurrency = Math.Clamp(_options.SeriesInfoMaxConcurrency, 1, 10);
+        var detailsBySeriesId = await FetchSeriesDetailsWithRetryAsync(
+            providerUsed,
+            selectedSeries,
+            maxConcurrency,
+            Math.Clamp(_options.SeriesInfoMaxRetries, 0, 5),
+            Math.Clamp(_options.SeriesInfoRetryDelayMs, 10, 5000),
+            cancellationToken);
+
+        var upcomingWindowSeries = await _dbContext.Series
+            .Where(x => x.SourceProvider == selectedProvider)
+            .Where(x => (x.StartDateUtc ?? x.EndDateUtc ?? x.LastSyncedAtUtc) >= fromUtc)
+            .Where(x => (x.StartDateUtc ?? x.EndDateUtc ?? x.LastSyncedAtUtc) <= toUtc)
+            .ToListAsync(cancellationToken);
+
+        var selectedSeriesIds = selectedSeries
+            .Select(x => x.ExternalId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var staleSeries = upcomingWindowSeries
+            .Where(x => !selectedSeriesIds.Contains(x.ExternalId))
+            .ToList();
+
+        if (staleSeries.Count > 0)
+        {
+            _dbContext.Series.RemoveRange(staleSeries);
+        }
 
         foreach (var providerSeries in selectedSeries)
         {
@@ -112,7 +140,7 @@ public sealed class SeriesSyncService : ISeriesSyncService
                 existingSeries[providerSeries.ExternalId] = series;
             }
 
-            var details = await providerUsed.GetSeriesInfoAsync(providerSeries.ExternalId, cancellationToken);
+            detailsBySeriesId.TryGetValue(providerSeries.ExternalId, out var details);
 
             series.Name = string.IsNullOrWhiteSpace(details?.Name) ? providerSeries.Name : details.Name;
             series.StartDateUtc = details?.StartDateUtc ?? providerSeries.StartDateUtc;
@@ -132,10 +160,18 @@ public sealed class SeriesSyncService : ISeriesSyncService
 
             var existingSeriesMatches = (await _dbContext.SeriesMatches
                 .Where(x => x.SeriesId == series.Id
-                    && x.SourceProvider == selectedProvider
-                    && detailsMatchIds.Contains(x.ExternalId))
+                    && x.SourceProvider == selectedProvider)
                 .ToListAsync(cancellationToken))
                 .ToDictionary(x => x.ExternalId, StringComparer.OrdinalIgnoreCase);
+
+            var staleSeriesMatches = existingSeriesMatches.Values
+                .Where(x => !detailsMatchIds.Contains(x.ExternalId, StringComparer.OrdinalIgnoreCase))
+                .ToList();
+
+            if (staleSeriesMatches.Count > 0)
+            {
+                _dbContext.SeriesMatches.RemoveRange(staleSeriesMatches);
+            }
 
             foreach (var providerMatch in details.Matches)
             {
@@ -171,6 +207,84 @@ public sealed class SeriesSyncService : ISeriesSyncService
             SeriesUpserted: seriesUpserted,
             SeriesMatchesUpserted: seriesMatchesUpserted,
             SyncedAtUtc: syncedAtUtc);
+    }
+
+    private async Task<Dictionary<string, ProviderSeriesDetails?>> FetchSeriesDetailsWithRetryAsync(
+        ICricketProvider provider,
+        IReadOnlyList<ProviderSeries> seriesList,
+        int maxConcurrency,
+        int maxRetries,
+        int retryDelayMs,
+        CancellationToken cancellationToken)
+    {
+        var details = new Dictionary<string, ProviderSeriesDetails?>(StringComparer.OrdinalIgnoreCase);
+        var gate = new SemaphoreSlim(maxConcurrency);
+        var syncRoot = new object();
+
+        var tasks = seriesList.Select(async series =>
+        {
+            await gate.WaitAsync(cancellationToken);
+            try
+            {
+                var value = await FetchSingleSeriesWithRetryAsync(
+                    provider,
+                    series.ExternalId,
+                    maxRetries,
+                    retryDelayMs,
+                    cancellationToken);
+
+                lock (syncRoot)
+                {
+                    details[series.ExternalId] = value;
+                }
+            }
+            finally
+            {
+                gate.Release();
+            }
+        });
+
+        await Task.WhenAll(tasks);
+        return details;
+    }
+
+    private async Task<ProviderSeriesDetails?> FetchSingleSeriesWithRetryAsync(
+        ICricketProvider provider,
+        string seriesExternalId,
+        int maxRetries,
+        int retryDelayMs,
+        CancellationToken cancellationToken)
+    {
+        var attempt = 0;
+        while (true)
+        {
+            try
+            {
+                return await provider.GetSeriesInfoAsync(seriesExternalId, cancellationToken);
+            }
+            catch (Exception ex) when (attempt < maxRetries)
+            {
+                var delayMs = retryDelayMs * (int)Math.Pow(2, attempt);
+                _logger.LogWarning(
+                    ex,
+                    "Series details fetch failed for {SeriesExternalId}. Retry attempt {Attempt}/{MaxRetries} in {DelayMs}ms.",
+                    seriesExternalId,
+                    attempt + 1,
+                    maxRetries,
+                    delayMs);
+
+                await Task.Delay(delayMs, cancellationToken);
+                attempt++;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Series details fetch failed for {SeriesExternalId}. No retries left.",
+                    seriesExternalId);
+                return null;
+            }
+        }
     }
 
     private List<string> BuildProviderPriority()

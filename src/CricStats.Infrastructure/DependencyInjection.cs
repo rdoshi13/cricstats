@@ -37,12 +37,24 @@ public static class DependencyInjection
         var seriesSyncWindowDays = int.TryParse(providerSection["SeriesSyncWindowDays"], out var parsedSeriesSyncWindow)
             ? parsedSeriesSyncWindow
             : 120;
+        var seriesInfoMaxConcurrency = int.TryParse(providerSection["SeriesInfoMaxConcurrency"], out var parsedSeriesInfoMaxConcurrency)
+            ? parsedSeriesInfoMaxConcurrency
+            : 3;
+        var seriesInfoMaxRetries = int.TryParse(providerSection["SeriesInfoMaxRetries"], out var parsedSeriesInfoMaxRetries)
+            ? parsedSeriesInfoMaxRetries
+            : 2;
+        var seriesInfoRetryDelayMs = int.TryParse(providerSection["SeriesInfoRetryDelayMs"], out var parsedSeriesInfoRetryDelayMs)
+            ? parsedSeriesInfoRetryDelayMs
+            : 300;
 
         services.AddSingleton<IOptions<CricketProvidersOptions>>(Microsoft.Extensions.Options.Options.Create(new CricketProvidersOptions
         {
             Priority = priority,
             SyncWindowDays = syncWindowDays,
-            SeriesSyncWindowDays = seriesSyncWindowDays
+            SeriesSyncWindowDays = seriesSyncWindowDays,
+            SeriesInfoMaxConcurrency = seriesInfoMaxConcurrency,
+            SeriesInfoMaxRetries = seriesInfoMaxRetries,
+            SeriesInfoRetryDelayMs = seriesInfoRetryDelayMs
         }));
 
         var liveCricketSection = configuration.GetSection(LiveCricketOptions.SectionName);
