@@ -9,10 +9,14 @@ namespace CricStats.Api.Controllers;
 public sealed class SeriesController : ControllerBase
 {
     private readonly IUpcomingSeriesService _upcomingSeriesService;
+    private readonly ISeriesDetailsService _seriesDetailsService;
 
-    public SeriesController(IUpcomingSeriesService upcomingSeriesService)
+    public SeriesController(
+        IUpcomingSeriesService upcomingSeriesService,
+        ISeriesDetailsService seriesDetailsService)
     {
         _upcomingSeriesService = upcomingSeriesService;
+        _seriesDetailsService = seriesDetailsService;
     }
 
     [HttpGet("upcoming")]
@@ -36,6 +40,45 @@ public sealed class SeriesController : ControllerBase
             query.From,
             query.To,
             cancellationToken);
+
+        return Ok(response);
+    }
+
+    [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(SeriesDetailsResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SeriesDetailsResponse>> GetSeriesById(
+        Guid id,
+        [FromQuery] GetSeriesByIdQuery query,
+        CancellationToken cancellationToken)
+    {
+        if (query.Page < 1)
+        {
+            return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["page"] = ["'page' must be greater than or equal to 1."]
+            }));
+        }
+
+        if (query.PageSize < 1 || query.PageSize > 100)
+        {
+            return BadRequest(new ValidationProblemDetails(new Dictionary<string, string[]>
+            {
+                ["pageSize"] = ["'pageSize' must be between 1 and 100."]
+            }));
+        }
+
+        var response = await _seriesDetailsService.GetSeriesByIdAsync(
+            id,
+            query.Page,
+            query.PageSize,
+            cancellationToken);
+
+        if (response is null)
+        {
+            return NotFound();
+        }
 
         return Ok(response);
     }

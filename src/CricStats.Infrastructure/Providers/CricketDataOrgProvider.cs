@@ -205,10 +205,14 @@ public sealed class CricketDataOrgProvider : ICricketProvider
                     var matchType = ReadString(item, "matchType");
                     var status = ReadString(item, "status") ?? string.Empty;
                     var startTimeUtc = ParseStartTimeUtc(ReadString(item, "dateTimeGMT"), ReadString(item, "date"));
+                    var venueRaw = ReadString(item, "venue");
+                    ParseSeriesVenue(venueRaw, name, out var venueName, out var venueCountry);
 
                     matches.Add(new ProviderSeriesMatch(
                         ExternalId: externalId,
                         Name: name,
+                        VenueName: venueName,
+                        VenueCountry: venueCountry,
                         Format: ParseNullableFormat(matchType, name),
                         StartTimeUtc: startTimeUtc,
                         Status: ParseStatus(status),
@@ -359,6 +363,37 @@ public sealed class CricketDataOrgProvider : ICricketProvider
             .ToArray());
 
         return string.IsNullOrWhiteSpace(normalized) ? "unknown" : normalized;
+    }
+
+    private static void ParseSeriesVenue(
+        string? venueRaw,
+        string matchName,
+        out string venueName,
+        out string venueCountry)
+    {
+        if (string.IsNullOrWhiteSpace(venueRaw))
+        {
+            venueName = "Unknown Venue";
+            venueCountry = InferCountry(matchName, string.Empty, string.Empty, string.Empty);
+            return;
+        }
+
+        var parts = venueRaw.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        venueName = parts.FirstOrDefault() ?? "Unknown Venue";
+
+        if (parts.Length >= 2)
+        {
+            venueCountry = parts[^1];
+        }
+        else
+        {
+            venueCountry = InferCountry(matchName, string.Empty, string.Empty, venueRaw);
+        }
+
+        if (string.IsNullOrWhiteSpace(venueCountry))
+        {
+            venueCountry = "Unknown";
+        }
     }
 
     private static string? ReadString(JsonElement element, string propertyName)

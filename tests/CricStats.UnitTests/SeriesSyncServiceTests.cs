@@ -80,6 +80,8 @@ public sealed class SeriesSyncServiceTests
                         new ProviderSeriesMatch(
                             ExternalId: "active-match-1",
                             Name: "Team A vs Team B",
+                            VenueName: "Wankhede Stadium",
+                            VenueCountry: "India",
                             Format: MatchFormat.ODI,
                             StartTimeUtc: now.AddDays(6),
                             Status: MatchStatus.Scheduled,
@@ -146,6 +148,8 @@ public sealed class SeriesSyncServiceTests
                         new ProviderSeriesMatch(
                             ExternalId: "retry-match-1",
                             Name: "Retry A vs Retry B",
+                            VenueName: "Eden Gardens",
+                            VenueCountry: "India",
                             Format: MatchFormat.T20,
                             StartTimeUtc: now.AddDays(2),
                             Status: MatchStatus.Scheduled,

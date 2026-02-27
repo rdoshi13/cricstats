@@ -91,6 +91,8 @@ internal sealed class FixtureCricketProvider : ICricketProvider
                 new ProviderSeriesMatch(
                     ExternalId: "fixture-series-match-1",
                     Name: "India vs Pakistan",
+                    VenueName: "National Stadium",
+                    VenueCountry: "Pakistan",
                     Format: MatchFormat.ODI,
                     StartTimeUtc: baseDay.AddDays(3).AddHours(10),
                     Status: MatchStatus.Scheduled,
@@ -98,6 +100,8 @@ internal sealed class FixtureCricketProvider : ICricketProvider
                 new ProviderSeriesMatch(
                     ExternalId: "fixture-series-match-2",
                     Name: "Sri Lanka vs Bangladesh",
+                    VenueName: "R. Premadasa Stadium",
+                    VenueCountry: "Sri Lanka",
                     Format: MatchFormat.ODI,
                     StartTimeUtc: baseDay.AddDays(4).AddHours(10),
                     Status: MatchStatus.Scheduled,

@@ -161,5 +161,47 @@ public sealed class MatchesUpcomingEndpointTests : IClassFixture<CustomWebApplic
         Assert.True(firstSeries.TryGetProperty("name", out _));
         Assert.True(firstSeries.TryGetProperty("matches", out var matches));
         Assert.Equal(JsonValueKind.Array, matches.ValueKind);
+        Assert.True(matches[0].TryGetProperty("venueName", out _));
+        Assert.True(matches[0].TryGetProperty("venueCountry", out _));
+    }
+
+    [Fact]
+    public async Task GetSeriesById_ReturnsSeriesDetailsWithPagination()
+    {
+        var client = _factory.CreateClient();
+        var syncResponse = await client.PostAsync("/api/v1/admin/sync/series", content: null);
+        syncResponse.EnsureSuccessStatusCode();
+
+        var listResponse = await client.GetAsync("/api/v1/series/upcoming");
+        listResponse.EnsureSuccessStatusCode();
+
+        await using var listStream = await listResponse.Content.ReadAsStreamAsync();
+        using var listJson = await JsonDocument.ParseAsync(listStream);
+        var seriesId = listJson.RootElement.GetProperty("series")[0].GetProperty("seriesId").GetGuid();
+
+        var response = await client.GetAsync($"/api/v1/series/{seriesId}?page=1&pageSize=1");
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync();
+        using var json = await JsonDocument.ParseAsync(stream);
+
+        Assert.Equal(seriesId, json.RootElement.GetProperty("seriesId").GetGuid());
+        Assert.Equal(1, json.RootElement.GetProperty("matchPage").GetInt32());
+        Assert.Equal(1, json.RootElement.GetProperty("matchPageSize").GetInt32());
+        Assert.True(json.RootElement.GetProperty("totalMatchCount").GetInt32() >= 1);
+        Assert.Equal(1, json.RootElement.GetProperty("matches").GetArrayLength());
+        Assert.True(json.RootElement.GetProperty("matches")[0].TryGetProperty("venueName", out _));
+        Assert.True(json.RootElement.GetProperty("matches")[0].TryGetProperty("venueCountry", out _));
+    }
+
+    [Fact]
+    public async Task GetSeriesById_UnknownSeries_ReturnsNotFound()
+    {
+        var client = _factory.CreateClient();
+        var unknownSeriesId = Guid.NewGuid();
+
+        var response = await client.GetAsync($"/api/v1/series/{unknownSeriesId}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 }

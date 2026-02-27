@@ -142,6 +142,7 @@ public static class DependencyInjection
         services.AddScoped<IUpcomingMatchesService, UpcomingMatchesService>();
         services.AddScoped<ISeriesSyncService, SeriesSyncService>();
         services.AddScoped<IUpcomingSeriesService, UpcomingSeriesService>();
+        services.AddScoped<ISeriesDetailsService, SeriesDetailsService>();
         services.AddScoped<IWeatherRiskService, WeatherRiskService>();
 
         return services;

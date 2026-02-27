@@ -271,6 +271,17 @@ GET /api/v1/venues/{id}/historical
 - Avg 1st innings score
 - Win toss impact (future)
 
+GET /api/v1/series/upcoming
+
+- Upcoming series catalog from DB
+
+GET /api/v1/series/{id}
+
+- Series details from DB
+- Query params:
+  - page (default 1)
+  - pageSize (default 20, max 100)
+
 Admin endpoints (protected):
 POST /api/v1/admin/sync/upcoming
 POST /api/v1/admin/sync/series

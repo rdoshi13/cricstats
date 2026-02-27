@@ -16,6 +16,12 @@ public sealed class SeriesMatchConfiguration : IEntityTypeConfiguration<SeriesMa
             .IsRequired()
             .HasMaxLength(300);
 
+        builder.Property(x => x.VenueName)
+            .HasMaxLength(300);
+
+        builder.Property(x => x.VenueCountry)
+            .HasMaxLength(100);
+
         builder.Property(x => x.Format)
             .HasConversion<string>()
             .HasMaxLength(10);

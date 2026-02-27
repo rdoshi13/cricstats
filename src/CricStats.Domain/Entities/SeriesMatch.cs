@@ -8,6 +8,8 @@ public sealed class SeriesMatch
     public Guid SeriesId { get; set; }
     public Series Series { get; set; } = null!;
     public string Name { get; set; } = string.Empty;
+    public string? VenueName { get; set; }
+    public string? VenueCountry { get; set; }
     public MatchFormat? Format { get; set; }
     public DateTimeOffset? StartTimeUtc { get; set; }
     public MatchStatus? Status { get; set; }

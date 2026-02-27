@@ -85,6 +85,8 @@ public sealed class UpcomingSeriesService : IUpcomingSeriesService
                         m.Id,
                         m.ExternalId,
                         m.Name,
+                        m.VenueName ?? "Unknown Venue",
+                        m.VenueCountry ?? "Unknown",
                         m.Format?.ToString(),
                         m.StartTimeUtc,
                         m.Status?.ToString(),

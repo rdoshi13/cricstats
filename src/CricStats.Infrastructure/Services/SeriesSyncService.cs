@@ -190,6 +190,8 @@ public sealed class SeriesSyncService : ISeriesSyncService
                 }
 
                 seriesMatch.Name = providerMatch.Name;
+                seriesMatch.VenueName = providerMatch.VenueName;
+                seriesMatch.VenueCountry = providerMatch.VenueCountry;
                 seriesMatch.Format = providerMatch.Format;
                 seriesMatch.StartTimeUtc = providerMatch.StartTimeUtc;
                 seriesMatch.Status = providerMatch.Status;
