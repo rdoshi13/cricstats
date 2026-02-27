@@ -13,7 +13,7 @@ CricStats is a production-grade cricket analytics platform built with:
 
 ---
 
-# Current Status (as of February 23, 2026)
+# Current Status (as of February 26, 2026)
 
 Implemented now:
 
@@ -24,6 +24,10 @@ Implemented now:
 - Normalization + upsert pipeline for teams, venues, and matches
 - `GET /api/v1/matches/upcoming` backed by database with filter support (`country`, `format`, `from`, `to`)
 - `POST /api/v1/admin/sync/upcoming` to trigger fixture sync
+- Weather provider integration (stub `OpenMeteoStub`) and persisted weather snapshots
+- Composite weather risk computation + storage in `MatchWeatherRisk`
+- `GET /api/v1/matches/{id}/weather-risk` for score + breakdown
+- `POST /api/v1/admin/weather/refresh` to recompute upcoming match weather risk
 - Unit tests + integration smoke tests
 
 Current behavior:
@@ -31,11 +35,12 @@ Current behavior:
 - The project is API-first at this stage (no website UI yet)
 - Upcoming endpoint reads from Postgres; if empty, it triggers provider sync and then returns data
 - Provider priority is configurable in `src/CricStats.Api/appsettings.json` under `CricketProviders`
+- Weather risk settings are configurable in `src/CricStats.Api/appsettings.json` under `WeatherRisk`
 - Swagger is available locally at `http://localhost:5000/swagger` while the API runs in Development
 
 Not implemented yet:
 
-- Weather API integration and composite weather computation pipeline
+- Real external weather API integration (current weather provider is deterministic stub data)
 - Hangfire recurring jobs
 - Historical ingestion/analytics endpoints
 - Next.js frontend pages
@@ -306,7 +311,7 @@ Data fetching:
 - Normalize + upsert fixtures
 - Country filtering support
 
-## Milestone 3 – Weather Integration (Planned)
+## Milestone 3 – Weather Integration (Completed)
 
 - Implement WeatherClient
 - Compute Composite Risk
@@ -377,11 +382,23 @@ Completed deliverables:
 4. Switched upcoming matches endpoint to database-backed queries with country/format/date filters.
 5. Added admin sync endpoint: `POST /api/v1/admin/sync/upcoming`.
 
+# Milestone 3 Delivery Summary (Completed)
+
+Completed deliverables:
+
+1. Added weather provider abstraction and stub implementation (`OpenMeteoStub`).
+2. Added weather snapshot ingestion for match windows (`-2h` to `+6h`).
+3. Implemented composite weather risk calculator and risk-level mapping.
+4. Persisted and exposed `MatchWeatherRisk` for each upcoming match.
+5. Added weather endpoints:
+   - `GET /api/v1/matches/{id}/weather-risk`
+   - `POST /api/v1/admin/weather/refresh`
+
 Next implementation focus:
 
-1. Milestone 3: weather integration and composite risk computation.
-2. Persist and expose computed weather risk details per match.
-3. Keep provider-driven ingestion as the source of truth for upcoming fixtures.
+1. Milestone 4: Hangfire recurring jobs for fixture sync and weather risk refresh.
+2. Schedule idempotent background ingestion without changing API contracts.
+3. Add dashboard/operational visibility for recurring jobs.
 
 ---
 
@@ -417,6 +434,15 @@ Optional manual sync trigger:
 
 ```bash
 curl -X POST "http://localhost:5000/api/v1/admin/sync/upcoming"
+```
+
+Optional weather refresh and weather-risk lookup:
+
+```bash
+curl -X POST "http://localhost:5000/api/v1/admin/weather/refresh"
+curl "http://localhost:5000/api/v1/matches/upcoming"
+# Use a matchId from the response below:
+curl "http://localhost:5000/api/v1/matches/{matchId}/weather-risk"
 ```
 
 ## 5. Build and test

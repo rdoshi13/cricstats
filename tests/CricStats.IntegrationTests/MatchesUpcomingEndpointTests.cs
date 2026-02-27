@@ -78,4 +78,48 @@ public sealed class MatchesUpcomingEndpointTests : IClassFixture<CustomWebApplic
         Assert.True(json.RootElement.GetProperty("matchesInserted").GetInt32() >= 0);
         Assert.True(json.RootElement.GetProperty("providersTried").GetArrayLength() >= 1);
     }
+
+    [Fact]
+    public async Task RefreshWeatherRiskEndpoint_ReturnsSummary()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.PostAsync("/api/v1/admin/weather/refresh", content: null);
+
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync();
+        using var json = await JsonDocument.ParseAsync(stream);
+
+        Assert.Equal("OpenMeteoStub", json.RootElement.GetProperty("providerUsed").GetString());
+        Assert.True(json.RootElement.GetProperty("matchesProcessed").GetInt32() >= 1);
+        Assert.True(json.RootElement.GetProperty("risksUpdated").GetInt32() >= 1);
+    }
+
+    [Fact]
+    public async Task GetMatchWeatherRisk_ReturnsRiskAndBreakdown()
+    {
+        var client = _factory.CreateClient();
+
+        var upcomingResponse = await client.GetAsync("/api/v1/matches/upcoming");
+        upcomingResponse.EnsureSuccessStatusCode();
+
+        await using var stream = await upcomingResponse.Content.ReadAsStreamAsync();
+        using var upcomingJson = await JsonDocument.ParseAsync(stream);
+        var matchId = upcomingJson.RootElement
+            .GetProperty("matches")[0]
+            .GetProperty("matchId")
+            .GetGuid();
+
+        var weatherResponse = await client.GetAsync($"/api/v1/matches/{matchId}/weather-risk");
+
+        weatherResponse.EnsureSuccessStatusCode();
+
+        await using var weatherStream = await weatherResponse.Content.ReadAsStreamAsync();
+        using var weatherJson = await JsonDocument.ParseAsync(weatherStream);
+
+        Assert.Equal(matchId, weatherJson.RootElement.GetProperty("matchId").GetGuid());
+        Assert.True(weatherJson.RootElement.GetProperty("compositeRiskScore").GetDecimal() >= 0m);
+        Assert.True(weatherJson.RootElement.GetProperty("breakdown").TryGetProperty("averagePrecipProbability", out _));
+    }
 }

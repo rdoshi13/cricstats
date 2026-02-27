@@ -9,6 +9,8 @@ namespace CricStats.IntegrationTests;
 
 public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
 {
+    private readonly string _databaseName = $"CricStatsIntegration-{Guid.NewGuid()}";
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.ConfigureServices(services =>
@@ -17,7 +19,7 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
             services.RemoveAll<CricStatsDbContext>();
 
             services.AddDbContext<CricStatsDbContext>(options =>
-                options.UseInMemoryDatabase($"CricStatsIntegration-{Guid.NewGuid()}"));
+                options.UseInMemoryDatabase(_databaseName));
         });
     }
 }

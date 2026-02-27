@@ -1,5 +1,6 @@
 using CricStats.Application.Interfaces;
 using CricStats.Application.Models;
+using CricStats.Contracts.Weather;
 using CricStats.Contracts.Matches;
 using CricStats.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
@@ -12,10 +13,14 @@ public sealed class MatchesController : ControllerBase
 {
     private static readonly string[] ValidFormats = Enum.GetNames<MatchFormat>();
     private readonly IUpcomingMatchesService _upcomingMatchesService;
+    private readonly IWeatherRiskService _weatherRiskService;
 
-    public MatchesController(IUpcomingMatchesService upcomingMatchesService)
+    public MatchesController(
+        IUpcomingMatchesService upcomingMatchesService,
+        IWeatherRiskService weatherRiskService)
     {
         _upcomingMatchesService = upcomingMatchesService;
+        _weatherRiskService = weatherRiskService;
     }
 
     [HttpGet("upcoming")]
@@ -53,6 +58,22 @@ public sealed class MatchesController : ControllerBase
 
         var filter = new UpcomingMatchesFilter(query.Country, parsedFormat, query.From, query.To);
         var response = await _upcomingMatchesService.GetUpcomingMatchesAsync(filter, cancellationToken);
+
+        return Ok(response);
+    }
+
+    [HttpGet("{id:guid}/weather-risk")]
+    [ProducesResponseType(typeof(MatchWeatherRiskResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<MatchWeatherRiskResponse>> GetMatchWeatherRisk(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var response = await _weatherRiskService.GetMatchWeatherRiskAsync(id, cancellationToken);
+        if (response is null)
+        {
+            return NotFound();
+        }
 
         return Ok(response);
     }

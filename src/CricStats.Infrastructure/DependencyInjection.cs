@@ -3,7 +3,9 @@ using CricStats.Application.Interfaces.Providers;
 using CricStats.Infrastructure.Persistence;
 using CricStats.Infrastructure.Options;
 using CricStats.Infrastructure.Providers;
+using CricStats.Infrastructure.Providers.Weather;
 using CricStats.Infrastructure.Services;
+using CricStats.Infrastructure.Services.Weather;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -39,11 +41,33 @@ public static class DependencyInjection
             SyncWindowDays = syncWindowDays
         }));
 
+        var weatherSection = configuration.GetSection(WeatherRiskOptions.SectionName);
+        var providerName = weatherSection["ProviderName"] ?? "OpenMeteoStub";
+        var refreshWindowDays = int.TryParse(weatherSection["RefreshWindowDays"], out var parsedRefreshWindowDays)
+            ? parsedRefreshWindowDays
+            : 14;
+        var precipAmountMaxMm = decimal.TryParse(weatherSection["PrecipAmountMaxMm"], out var parsedPrecipAmountMax)
+            ? parsedPrecipAmountMax
+            : 20m;
+        var windSpeedMaxKph = decimal.TryParse(weatherSection["WindSpeedMaxKph"], out var parsedWindSpeedMax)
+            ? parsedWindSpeedMax
+            : 60m;
+
+        services.AddSingleton<IOptions<WeatherRiskOptions>>(Microsoft.Extensions.Options.Options.Create(new WeatherRiskOptions
+        {
+            ProviderName = providerName,
+            RefreshWindowDays = refreshWindowDays,
+            PrecipAmountMaxMm = precipAmountMaxMm,
+            WindSpeedMaxKph = windSpeedMaxKph
+        }));
+
         services.AddDbContext<CricStatsDbContext>(options => options.UseNpgsql(connectionString));
         services.AddScoped<ICricketProvider, CricketDataOrgProvider>();
         services.AddScoped<ICricketProvider, ApiSportsProvider>();
+        services.AddScoped<IWeatherProvider, OpenMeteoStubProvider>();
         services.AddScoped<IUpcomingMatchesSyncService, UpcomingMatchesSyncService>();
         services.AddScoped<IUpcomingMatchesService, UpcomingMatchesService>();
+        services.AddScoped<IWeatherRiskService, WeatherRiskService>();
 
         return services;
     }
